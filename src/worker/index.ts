@@ -95,7 +95,7 @@ function generateEmbedScript(origin: string): string {
       this._config = {
         artist: 'Paula Prieto',
         theme: 'light',
-        limit: 10,
+        limit: 20,
         buttonText: 'BUY',
         locale: 'es',
         fontSize: '0.8125rem',
