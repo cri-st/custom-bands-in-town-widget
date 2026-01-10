@@ -84,7 +84,6 @@ export default {
 };
 
 function generateEmbedScript(origin: string): string {
-  // We use backslashes to escape characters that should remain literal in the final JS string
   return `
 (function() {
   const SCRIPT_NAME = 'embed.js';
@@ -98,7 +97,10 @@ function generateEmbedScript(origin: string): string {
         theme: 'light',
         limit: 10,
         buttonText: 'BUY',
-        locale: 'es'
+        locale: 'es',
+        fontSize: '0.8125rem',
+        lineHeight: '1.2',
+        letterSpacing: '0.03em'
       };
       this._origin = "${origin}";
     }
@@ -109,68 +111,104 @@ function generateEmbedScript(origin: string): string {
       this._config.limit = parseInt(this.getAttribute('data-limit') || '10');
       this._config.buttonText = this.getAttribute('data-button-text') || this._config.buttonText;
       this._config.locale = this.getAttribute('data-locale') || this._config.locale;
+      this._config.fontSize = this.getAttribute('data-font-size') || this._config.fontSize;
+      this._config.lineHeight = this.getAttribute('data-line-height') || this._config.lineHeight;
+      this._config.letterSpacing = this.getAttribute('data-letter-spacing') || this._config.letterSpacing;
 
       this.render();
       this.fetchEvents();
     }
 
-    render(content = '<div class="bit-loading">Cargando fechas...</div>') {
+    render(content = '<div class="bit-loading">LOADING...</div>') {
       this._shadow.innerHTML = \`
         <style>
-          :host { display: block; width: 100%; border-radius: 8px; overflow: hidden; }
-          @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap');
+          :host { 
+            display: block; 
+            width: 100%;
+            --bit-font-size: \${this._config.fontSize};
+            --bit-line-height: \${this._config.lineHeight};
+            --bit-letter-spacing: \${this._config.letterSpacing};
+          }
           
           .bit-container {
-            font-family: 'Outfit', -apple-system, sans-serif;
-            color: #111;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-weight: bold;
+            font-size: var(--bit-font-size);
+            line-height: var(--bit-line-height);
+            letter-spacing: var(--bit-letter-spacing);
+            color: #000;
             background: transparent;
             max-width: 100%;
+            text-transform: uppercase;
           }
-          .bit-events-list { list-style: none; padding: 0; margin: 0; }
+          
+          .bit-events-list { 
+            list-style: none; 
+            padding: 0; 
+            margin: 0; 
+          }
+          
           .bit-event-row {
             display: grid;
-            grid-template-columns: 1.5fr 1fr 1fr auto;
+            grid-template-columns: 1.2fr 1fr 1.5fr auto;
             align-items: center;
-            gap: 24px;
-            padding: 24px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            opacity: 0;
-            transform: translateY(10px);
-            animation: bitFadeIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            gap: 20px;
+            padding: 8px 0;
+            /* No borders in the reference image */
           }
-          .bit-event-row:last-child { border-bottom: none; }
-          .bit-venue { font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
-          .bit-date { font-size: 14px; text-transform: uppercase; text-align: center; color: #444; }
-          .bit-location { font-size: 14px; text-transform: uppercase; color: #666; text-align: center; }
+          
+          .bit-venue { 
+            text-align: left;
+          }
+          
+          .bit-date { 
+            text-align: left;
+          }
+          
+          .bit-location { 
+            text-align: left;
+          }
+          
           .bit-buy-btn {
             display: inline-block;
-            padding: 10px 28px;
-            border: 1.5px solid #000;
+            padding: 4px 12px;
+            border: 1px solid #000;
             color: #000;
             text-decoration: none;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.15em;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.1s ease;
             text-align: center;
-            min-width: 90px;
+            min-width: 50px;
           }
-          .bit-buy-btn:hover { background: #000; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-          .bit-loading, .bit-error { padding: 60px 20px; text-align: center; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; }
-          @keyframes bitFadeIn { to { opacity: 1; transform: translateY(0); } }
           
-          @media (max-width: 900px) {
-            .bit-event-row { grid-template-columns: 1.5fr 1fr auto; gap: 16px; }
-            .bit-location { display: none; }
+          .bit-buy-btn:hover { 
+            background: #000; 
+            color: #fff; 
           }
-          @media (max-width: 600px) {
-            .bit-event-row { grid-template-columns: 1fr auto; gap: 12px; }
+          
+          .bit-loading, .bit-error { 
+            padding: 20px 0; 
+            text-align: left;
+          }
+
+          @media (max-width: 768px) {
+            .bit-event-row { 
+              grid-template-columns: 1fr auto; 
+              gap: 10px;
+              padding: 12px 0;
+            }
+            .bit-location { display: none; }
             .bit-date { text-align: right; }
           }
+          
           @media (max-width: 480px) {
-            .bit-event-row { grid-template-columns: 1fr; gap: 8px; padding: 24px 0; }
-            .bit-venue, .bit-date { text-align: left; }
-            .bit-buy-btn { width: 100%; box-sizing: border-box; margin-top: 12px; }
+            .bit-event-row { 
+              grid-template-columns: 1fr; 
+              gap: 4px;
+              padding: 16px 0;
+            }
+            .bit-date, .bit-venue, .bit-location { text-align: left; }
+            .bit-action { margin-top: 4px; }
+            .bit-buy-btn { width: 100%; box-sizing: border-box; }
           }
         </style>
         <div class="bit-container">
@@ -181,7 +219,7 @@ function generateEmbedScript(origin: string): string {
 
     async fetchEvents() {
       try {
-        const queryUrl = \\\`\\\${this._origin}/api/events?artist=\\\${encodeURIComponent(this._config.artist)}\\\`;
+        const queryUrl = \`\${this._origin}/api/events?artist=\${encodeURIComponent(this._config.artist)}\`;
         const response = await fetch(queryUrl);
         if (!response.ok) {
           const errorData = await response.json();
@@ -190,32 +228,36 @@ function generateEmbedScript(origin: string): string {
         
         const events = await response.json();
         if (!Array.isArray(events) || events.length === 0) {
-          this.render('<div class="bit-loading">No hay fechas programadas próximamente.</div>');
+          this.render('<div class="bit-loading">NO UPCOMING DATES.</div>');
           return;
         }
 
         const listHtml = events.slice(0, this._config.limit).map((event, index) => {
           const date = new Date(event.datetime);
-          const formattedDate = new Intl.DateTimeFormat(this._config.locale, { day: 'numeric', month: 'long' }).format(date).toUpperCase();
+          // Month name according to locale
+          const day = date.getDate();
+          const month = new Intl.DateTimeFormat(this._config.locale, { month: 'long' }).format(date).toUpperCase();
+          const formattedDate = \`\${day} \${month}\`;
+          
           const buyUrl = event.offers && event.offers.length > 0 ? event.offers[0].url : event.url;
           
-          return \\\`
-            <div class="bit-event-row" style="animation-delay: \\\${index * 60}ms">
-              <div class="bit-venue">\\\${event.venue.name}</div>
-              <div class="bit-date">\\\${formattedDate}</div>
-              <div class="bit-location">\\\${event.venue.city}, \\\${event.venue.country}</div>
+          return \`
+            <div class="bit-event-row">
+              <div class="bit-venue">\${event.venue.name}</div>
+              <div class="bit-date">\${formattedDate}</div>
+              <div class="bit-location">\${event.venue.city}, \${event.venue.country}</div>
               <div class="bit-action">
-                <a href="\\\${buyUrl}" target="_blank" rel="noopener noreferrer" class="bit-buy-btn">
-                  \\\${this._config.buttonText}
+                <a href="\${buyUrl}" target="_blank" rel="noopener noreferrer" class="bit-buy-btn">
+                  \${this._config.buttonText}
                 </a>
               </div>
             </div>
-          \\\`;
+          \`;
         }).join('');
 
-        this.render(\\\`<div class="bit-events-list">\\\${listHtml}</div>\\\`);
+        this.render(\`<div class="bit-events-list">\${listHtml}</div>\`);
       } catch (error) {
-        this.render(\\\`<div class="bit-error">Error: \\\${error.message}</div>\\\`);
+        this.render(\`<div class="bit-error">ERROR: \${error.message.toUpperCase()}</div>\`);
       }
     }
   }
@@ -227,13 +269,11 @@ function generateEmbedScript(origin: string): string {
   function init() {
     const placeholders = document.querySelectorAll('#bit-widget');
     placeholders.forEach(p => {
-      if (p.tagName === 'DIV') {
-        const widget = document.createElement('bandsintown-widget');
-        Array.from(p.attributes).forEach(attr => {
-          widget.setAttribute(attr.name, attr.value);
-        });
-        p.parentNode.replaceChild(widget, p);
-      }
+      const widget = document.createElement('bandsintown-widget');
+      Array.from(p.attributes).forEach(attr => {
+        widget.setAttribute(attr.name, attr.value);
+      });
+      p.parentNode ? p.parentNode.replaceChild(widget, p) : null;
     });
   }
 
@@ -264,7 +304,6 @@ function generateMockEvents(): Event[] {
     { name: 'Teatro Coliseo', city: 'Buenos Aires', country: 'Argentina' },
     { name: 'Vorterix', city: 'Buenos Aires', country: 'Argentina' },
     { name: 'Niceto Club', city: 'Buenos Aires', country: 'Argentina' },
-    // Subliminal messages (creative, non-technical)
     { name: 'Sala Configura Tu API', city: 'Bandsintown', country: 'API Land' },
     { name: 'Teatro De Las Credenciales', city: 'Secret Key', country: 'Token City' },
     { name: 'Anfiteatro Conecta Tu Cuenta', city: 'Paula Prieto', country: 'Necesita Acceso' },
@@ -275,7 +314,7 @@ function generateMockEvents(): Event[] {
 
   return venues.map((venue, i) => {
     const datetime = new Date(now);
-    datetime.setDate(now.getDate() + (i + 1) * 7); // One event per week
+    datetime.setDate(now.getDate() + (i + 1) * 7);
 
     return {
       id: `mock-${i + 1}`,
