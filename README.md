@@ -29,21 +29,6 @@ Para insertar el widget en cualquier sitio web, añade el siguiente código en l
 <script src="https://tu-worker.workers.dev/embed.js" defer></script>
 ```
 
-### Integración en Cargo.site (Iframe)
-
-Si estás usando **Cargo.site**, el método de script anterior no funcionará. Debes usar un `<iframe>` apuntando al endpoint `/widget`:
-
-```html
-<iframe 
-  src="https://tu-worker.workers.dev/widget?artist=Paula+Prieto&limit=20&button=BUY&locale=es"
-  style="width:100%; height:800px; border:none;"
-  frameborder="0"
-  scrolling="auto"
-></iframe>
-```
-
-Puedes personalizar el diseño pasando parámetros en la URL (ver tabla de opciones abajo).
-
 ### Opciones de Personalización (Data Attributes)
 
 Puedes configurar el widget directamente desde el HTML usando estos atributos:
