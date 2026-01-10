@@ -1,93 +1,91 @@
 import { Event } from '../types/bandsintown';
 
 export interface Env {
-    BANDSINTOWN_APP_ID: string;
-    ALLOWED_ORIGINS: string;
+  BANDSINTOWN_APP_ID: string;
+  ALLOWED_ORIGINS: string;
 }
 
 export default {
-    async fetch(request: Request, env: Env): Promise<Response> {
-        const url = new URL(request.url);
-        const path = url.pathname;
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
 
-        const corsHeaders = {
-            'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        };
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
 
-        if (request.method === 'OPTIONS') {
-            return new Response(null, { headers: corsHeaders });
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    if (path === '/health') {
+      return new Response('OK', { status: 200 });
+    }
+
+    if (path === '/api/events') {
+      const artist = url.searchParams.get('artist');
+      const date = url.searchParams.get('date') || 'upcoming';
+
+      if (!artist) {
+        return new Response(JSON.stringify({ error: 'Artist name is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!env.BANDSINTOWN_APP_ID || env.BANDSINTOWN_APP_ID === 'PENDING') {
+        const mockEvents = generateMockEvents();
+        return new Response(JSON.stringify(mockEvents), {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'X-Mock-Data': 'true'
+          },
+        });
+      }
+
+      try {
+        const bitUrl = `https://rest.bandsintown.com/artists/${encodeURIComponent(artist)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=${date}`;
+        const response = await fetch(bitUrl);
+
+        if (!response.ok) {
+          return new Response(JSON.stringify({ error: 'Failed to fetch from Bandsintown' }), {
+            status: response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
-        if (path === '/health') {
-            return new Response('OK', { status: 200 });
-        }
+        const data: Event[] = await response.json();
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: 'Internal server error' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
-        if (path === '/api/events') {
-            const artist = url.searchParams.get('artist');
-            const date = url.searchParams.get('date') || 'upcoming';
+    if (path === '/embed.js') {
+      const script = generateEmbedScript(url.origin);
+      return new Response(script, {
+        headers: {
+          'Content-Type': 'application/javascript',
+          ...corsHeaders,
+        },
+      });
+    }
 
-            if (!artist) {
-                return new Response(JSON.stringify({ error: 'Artist name is required' }), {
-                    status: 400,
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-            }
-
-            if (!env.BANDSINTOWN_APP_ID || env.BANDSINTOWN_APP_ID === 'PENDING') {
-                return new Response(
-                    JSON.stringify({
-                        error: 'Bandsintown API Key not configured',
-                        setup_guide: 'Refer to api_key_setup_guide.md'
-                    }),
-                    {
-                        status: 503,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    }
-                );
-            }
-
-            try {
-                const bitUrl = `https://rest.bandsintown.com/artists/${encodeURIComponent(artist)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=${date}`;
-                const response = await fetch(bitUrl);
-
-                if (!response.ok) {
-                    return new Response(JSON.stringify({ error: 'Failed to fetch from Bandsintown' }), {
-                        status: response.status,
-                        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    });
-                }
-
-                const data: Event[] = await response.json();
-                return new Response(JSON.stringify(data), {
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-            } catch (error) {
-                return new Response(JSON.stringify({ error: 'Internal server error' }), {
-                    status: 500,
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                });
-            }
-        }
-
-        if (path === '/embed.js') {
-            const script = generateEmbedScript(url.origin);
-            return new Response(script, {
-                headers: {
-                    'Content-Type': 'application/javascript',
-                    ...corsHeaders,
-                },
-            });
-        }
-
-        return new Response('Not Found', { status: 404 });
-    },
+    return new Response('Not Found', { status: 404 });
+  },
 };
 
 function generateEmbedScript(origin: string): string {
-    // We use backslashes to escape characters that should remain literal in the final JS string
-    return `
+  // We use backslashes to escape characters that should remain literal in the final JS string
+  return `
 (function() {
   const SCRIPT_NAME = 'embed.js';
   
@@ -246,4 +244,62 @@ function generateEmbedScript(origin: string): string {
   }
 })();
 `;
+}
+
+function generateMockEvents(): Event[] {
+  const venues = [
+    { name: 'Teatro Gran Rex', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Estadio Luna Park', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Movistar Arena', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Teatro Colón', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Estadio Único de La Plata', city: 'La Plata', country: 'Argentina' },
+    { name: 'Quality Espacio', city: 'Córdoba', country: 'Argentina' },
+    { name: 'Teatro El Círculo', city: 'Rosario', country: 'Argentina' },
+    { name: 'Arena Maipú', city: 'Mendoza', country: 'Argentina' },
+    { name: 'Anfiteatro Martín Fierro', city: 'Mar del Plata', country: 'Argentina' },
+    { name: 'Teatro Auditorium', city: 'Mar del Plata', country: 'Argentina' },
+    { name: 'Estadio Malvinas Argentinas', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Centro Cultural Kirchner', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Orfeo Superdomo', city: 'Córdoba', country: 'Argentina' },
+    { name: 'Teatro Coliseo', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Vorterix', city: 'Buenos Aires', country: 'Argentina' },
+    { name: 'Niceto Club', city: 'Buenos Aires', country: 'Argentina' },
+    // Subliminal messages (creative, non-technical)
+    { name: 'Sala Configura Tu API', city: 'Bandsintown', country: 'API Land' },
+    { name: 'Teatro De Las Credenciales', city: 'Secret Key', country: 'Token City' },
+    { name: 'Anfiteatro Conecta Tu Cuenta', city: 'Paula Prieto', country: 'Necesita Acceso' },
+    { name: 'Arena Activa Tu Llave', city: 'Visita Settings', country: 'En Tu Perfil' },
+  ];
+
+  const now = new Date();
+
+  return venues.map((venue, i) => {
+    const datetime = new Date(now);
+    datetime.setDate(now.getDate() + (i + 1) * 7); // One event per week
+
+    return {
+      id: `mock-${i + 1}`,
+      artist_id: 'mock-artist',
+      url: 'https://artists.bandsintown.com',
+      on_sale_datetime: '',
+      datetime: datetime.toISOString(),
+      title: '',
+      description: '',
+      venue: {
+        ...venue,
+        location: `${venue.city}, ${venue.country}`,
+        latitude: '0',
+        longitude: '0',
+        region: ''
+      },
+      offers: [
+        {
+          type: 'Tickets',
+          url: 'https://artists.bandsintown.com',
+          status: 'available'
+        }
+      ],
+      lineup: ['Paula Prieto']
+    };
+  });
 }
