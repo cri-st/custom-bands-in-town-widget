@@ -79,9 +79,137 @@ export default {
       });
     }
 
+    if (path === '/widget') {
+      const config = {
+        artist: url.searchParams.get('artist') || 'Paula Prieto',
+        limit: parseInt(url.searchParams.get('limit') || '20'),
+        button: url.searchParams.get('button') || 'BUY',
+        locale: url.searchParams.get('locale') || 'es',
+        fontSize: url.searchParams.get('fontSize') || '0.8125rem',
+        lineHeight: url.searchParams.get('lineHeight') || '1.2',
+        letterSpacing: url.searchParams.get('letterSpacing') || '0.03em',
+      };
+      const widgetHtml = generateWidgetPage(url.origin, config, env);
+      return new Response(widgetHtml, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...corsHeaders,
+        },
+      });
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
+
+interface WidgetConfig {
+  artist: string;
+  limit: number;
+  button: string;
+  locale: string;
+  fontSize: string;
+  lineHeight: string;
+  letterSpacing: string;
+}
+
+function generateWidgetPage(origin: string, config: WidgetConfig, env: Env): string {
+  return `<!DOCTYPE html>
+<html lang="${config.locale}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tour Dates</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: bold;
+      font-size: ${config.fontSize};
+      line-height: ${config.lineHeight};
+      letter-spacing: ${config.letterSpacing};
+      color: #000;
+      background: transparent;
+      text-transform: uppercase;
+      padding: 0;
+    }
+    .bit-events-list { list-style: none; }
+    .bit-event-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1.5fr auto;
+      align-items: center;
+      gap: 20px;
+      padding: 8px 0;
+    }
+    .bit-venue, .bit-date, .bit-location { text-align: left; }
+    .bit-buy-btn {
+      display: inline-block;
+      padding: 4px 12px;
+      border: 1px solid #000;
+      color: #000;
+      text-decoration: none;
+      transition: all 0.1s ease;
+      text-align: center;
+      min-width: 50px;
+    }
+    .bit-buy-btn:hover { background: #000; color: #fff; }
+    .bit-loading, .bit-error { padding: 20px 0; text-align: left; }
+    @media (max-width: 768px) {
+      .bit-event-row { grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; }
+      .bit-location { display: none; }
+      .bit-date { text-align: right; }
+    }
+    @media (max-width: 480px) {
+      .bit-event-row { grid-template-columns: 1fr; gap: 4px; padding: 16px 0; }
+      .bit-date, .bit-venue, .bit-location { text-align: left; }
+      .bit-action { margin-top: 4px; }
+      .bit-buy-btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="bit-container">
+    <div class="bit-loading">LOADING...</div>
+  </div>
+  <script>
+    (async function() {
+      const config = ${JSON.stringify(config)};
+      const origin = "${origin}";
+      const container = document.getElementById('bit-container');
+      
+      try {
+        const response = await fetch(origin + '/api/events?artist=' + encodeURIComponent(config.artist));
+        if (!response.ok) throw new Error('Failed to fetch events');
+        
+        const events = await response.json();
+        if (!Array.isArray(events) || events.length === 0) {
+          container.innerHTML = '<div class="bit-loading">NO UPCOMING DATES.</div>';
+          return;
+        }
+        
+        const listHtml = events.slice(0, config.limit).map(function(event) {
+          const date = new Date(event.datetime);
+          const day = date.getDate();
+          const month = new Intl.DateTimeFormat(config.locale, { month: 'long' }).format(date).toUpperCase();
+          const formattedDate = day + ' ' + month;
+          const buyUrl = event.offers && event.offers.length > 0 ? event.offers[0].url : event.url;
+          
+          return '<div class="bit-event-row">' +
+            '<div class="bit-venue">' + event.venue.name + '</div>' +
+            '<div class="bit-date">' + formattedDate + '</div>' +
+            '<div class="bit-location">' + event.venue.city + ', ' + event.venue.country + '</div>' +
+            '<div class="bit-action"><a href="' + buyUrl + '" target="_blank" rel="noopener noreferrer" class="bit-buy-btn">' + config.button + '</a></div>' +
+          '</div>';
+        }).join('');
+        
+        container.innerHTML = '<div class="bit-events-list">' + listHtml + '</div>';
+      } catch (error) {
+        container.innerHTML = '<div class="bit-error">ERROR: ' + error.message.toUpperCase() + '</div>';
+      }
+    })();
+  </script>
+</body>
+</html>`;
+}
 
 function generateEmbedScript(origin: string): string {
   return `
