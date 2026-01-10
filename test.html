@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bandsintown Widget Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #ffffff;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-weight: 400;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 60px;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+        .setup-notice {
+            background-color: #f8f8f8;
+            border: 1px solid #eee;
+            padding: 20px;
+            margin-bottom: 40px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Tour Dates</h1>
+
+    <div class="container">
+        <div class="setup-notice">
+            <strong>Note:</strong> To see real data, you must configure your <code>BANDSINTOWN_APP_ID</code> 
+            in <code>wrangler.toml</code> or via <code>.dev.vars</code> for local development.
+            <br>
+            Refer to <code>api_key_setup_guide.md</code> for instructions.
+        </div>
+
+        <!-- Bandsintown Events Widget -->
+        <div id="bit-widget" 
+             data-artist="Paula Prieto" 
+             data-theme="light" 
+             data-button-text="BUY"
+             data-locale="es">
+        </div>
+        
+        <!-- Script source will point to local worker during development -->
+        <script src="http://localhost:8787/embed.js" defer></script>
+    </div>
+
+</body>
+</html>
