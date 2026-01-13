@@ -97,39 +97,88 @@ export default {
         },
       });
     }
-    // Reverse Proxy: Serve Cargo.site page with widget injection
-    if (path === '/' || path === '/tour') {
-      try {
-        const cargoResponse = await fetch('https://673870.cargo.site/tour', {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; BandsintownWidget/1.0)',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          },
-        });
+    // --- Catch-all Proxy for Cargo.site ---
+    // This allows the entire site to work under the worker domain, including assets, JS, and navigation.
+    try {
+      // 1. Prepare the upstream URL
+      const cargoUrl = new URL(url.pathname + url.search, 'https://673870.cargo.site');
 
-        if (!cargoResponse.ok) {
-          return new Response('Failed to fetch page', { status: 502 });
-        }
+      // 2. Fetch from Cargo.site
+      const cargoResponse = await fetch(cargoUrl.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; BandsintownWidget/1.0)',
+          'Accept': request.headers.get('Accept') || '*/*',
+        },
+      });
 
-        let html = await cargoResponse.text();
-
-        // Generate inline widget HTML
-        const widgetHtml = generateInlineWidgetHtml(url.origin);
-
-        // Replace placeholder with widget
-        html = html.replace('WIDGET TOUR', widgetHtml);
-
-        return new Response(html, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-          },
-        });
-      } catch (error) {
-        return new Response('Proxy error: ' + (error as Error).message, { status: 500 });
+      // 3. For non-HTML responses (images, JS, CSS), return as-is
+      const contentType = cargoResponse.headers.get('Content-Type') || '';
+      if (!contentType.includes('text/html')) {
+        return cargoResponse;
       }
-    }
 
-    return new Response('Not Found', { status: 404 });
+      // 4. For HTML, perform our injections
+      let html = await cargoResponse.text();
+
+      // Fix Cargo API calls: It expects the hostname to match a site name. 
+      // We force it to use '673870'.
+      const globalFixScript = `
+        <script>
+          (function() {
+            // Force Cargo to recognize the site ID even on a different domain
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+              if (typeof url === 'string' && url.includes('api.cargo.site/v1/package/')) {
+                // Extract whatever hostname/ID it's trying to use and replace it with '673870'
+                const parts = url.split('/');
+                if (parts[parts.length - 1] !== '673870') {
+                  url = url.substring(0, url.lastIndexOf('/') + 1) + '673870';
+                }
+              }
+              return originalFetch(url, options);
+            };
+          })();
+        </script>
+      `;
+
+      // Perform widget injection if placeholder exists
+      if (html.includes('WIDGET TOUR')) {
+        const events = await getBandsintownEvents('Paula Prieto', env);
+        const widgetHtml = renderStaticWidget(events, {
+          artist: 'Paula Prieto',
+          limit: 20,
+          button: 'BUY',
+          locale: 'es',
+          fontSize: '0.8125rem',
+          lineHeight: '1.2',
+          letterSpacing: '0.03em'
+        });
+
+        html = html.replace(/WIDGET TOUR/g, (match, offset, fullText) => {
+          const textBefore = fullText.substring(0, offset);
+          const lastScriptOpen = textBefore.lastIndexOf('<script');
+          const lastScriptClose = textBefore.lastIndexOf('</script>');
+          if (lastScriptOpen > lastScriptClose) {
+            return JSON.stringify(widgetHtml).slice(1, -1);
+          }
+          return widgetHtml;
+        });
+      }
+
+      // Inject our fix script into <head>
+      if (html.includes('<head>')) {
+        html = html.replace('<head>', '<head>' + globalFixScript);
+      }
+
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+      });
+
+    } catch (error) {
+      return new Response('Proxy error: ' + (error as Error).message, { status: 500 });
+    }
   },
 };
 
@@ -143,20 +192,43 @@ interface WidgetConfig {
   letterSpacing: string;
 }
 
-function generateInlineWidgetHtml(origin: string): string {
-  const config = {
-    artist: 'Paula Prieto',
-    limit: 20,
-    button: 'BUY',
-    locale: 'es',
-    fontSize: '0.8125rem',
-    lineHeight: '1.2',
-    letterSpacing: '0.03em'
-  };
+async function getBandsintownEvents(artist: string, env: Env): Promise<Event[]> {
+  if (!env.BANDSINTOWN_APP_ID || env.BANDSINTOWN_APP_ID === 'PENDING') {
+    return generateMockEvents();
+  }
+  try {
+    const bitUrl = `https://rest.bandsintown.com/artists/${encodeURIComponent(artist)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=upcoming`;
+    const response = await fetch(bitUrl);
+    if (!response.ok) return generateMockEvents();
+    return await response.json() as Event[];
+  } catch {
+    return generateMockEvents();
+  }
+}
+
+function renderStaticWidget(events: Event[], config: any): string {
+  const listHtml = events.slice(0, config.limit).map((event) => {
+    const date = new Date(event.datetime);
+    const day = date.getDate();
+    // Using simple formatting to avoid Intl mismatch issues in different environments if any, 
+    // but Intl is generally supported in Workers.
+    const month = new Intl.DateTimeFormat(config.locale, { month: 'long' }).format(date).toUpperCase();
+    const formattedDate = `${day} ${month}`;
+    const buyUrl = event.offers && event.offers.length > 0 ? event.offers[0].url : event.url;
+
+    return `<div class="bit-event-row">
+      <div class="bit-venue">${event.venue.name}</div>
+      <div class="bit-date">${formattedDate}</div>
+      <div class="bit-location">${event.venue.city}, ${event.venue.country}</div>
+      <div class="bit-action"><a href="${buyUrl}" target="_blank" rel="noopener noreferrer" class="bit-buy-btn">${config.button}</a></div>
+    </div>`;
+  }).join('');
+
+  const emptyMsg = '<div class="bit-loading">NO UPCOMING DATES.</div>';
 
   return `
 <style>
-  .bit-inline-widget {
+  .bit-static-widget {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-weight: bold;
     font-size: ${config.fontSize};
@@ -165,16 +237,16 @@ function generateInlineWidgetHtml(origin: string): string {
     color: #000;
     text-transform: uppercase;
   }
-  .bit-inline-widget .bit-events-list { list-style: none; padding: 0; margin: 0; }
-  .bit-inline-widget .bit-event-row {
+  .bit-static-widget .bit-events-list { list-style: none; padding: 0; margin: 0; }
+  .bit-static-widget .bit-event-row {
     display: grid;
     grid-template-columns: 1.2fr 1fr 1.5fr auto;
     align-items: center;
     gap: 20px;
     padding: 8px 0;
   }
-  .bit-inline-widget .bit-venue, .bit-inline-widget .bit-date, .bit-inline-widget .bit-location { text-align: left; }
-  .bit-inline-widget .bit-buy-btn {
+  .bit-static-widget .bit-venue, .bit-static-widget .bit-date, .bit-static-widget .bit-location { text-align: left; }
+  .bit-static-widget .bit-buy-btn {
     display: inline-block;
     padding: 4px 12px;
     border: 1px solid #000;
@@ -184,60 +256,22 @@ function generateInlineWidgetHtml(origin: string): string {
     text-align: center;
     min-width: 50px;
   }
-  .bit-inline-widget .bit-buy-btn:hover { background: #000; color: #fff; }
-  .bit-inline-widget .bit-loading { padding: 20px 0; text-align: left; }
+  .bit-static-widget .bit-buy-btn:hover { background: #000; color: #fff; }
+  .bit-static-widget .bit-loading { padding: 20px 0; text-align: left; }
   @media (max-width: 768px) {
-    .bit-inline-widget .bit-event-row { grid-template-columns: 1fr auto; gap: 10px; }
-    .bit-inline-widget .bit-location { display: none; }
+    .bit-static-widget .bit-event-row { grid-template-columns: 1fr auto; gap: 10px; }
+    .bit-static-widget .bit-location { display: none; }
   }
   @media (max-width: 480px) {
-    .bit-inline-widget .bit-event-row { grid-template-columns: 1fr; gap: 4px; }
-    .bit-inline-widget .bit-buy-btn { width: 100%; }
+    .bit-static-widget .bit-event-row { grid-template-columns: 1fr; gap: 4px; }
+    .bit-static-widget .bit-buy-btn { width: 100%; box-sizing: border-box; }
   }
 </style>
-<div class="bit-inline-widget">
-  <div id="bit-inline-container">
-    <div class="bit-loading">LOADING...</div>
-  </div>
-</div>
-<script>
-(async function() {
-  var config = ${JSON.stringify(config)};
-  var origin = "${origin}";
-  var container = document.getElementById('bit-inline-container');
-  
-  try {
-    var response = await fetch(origin + '/api/events?artist=' + encodeURIComponent(config.artist));
-    if (!response.ok) throw new Error('Failed to fetch');
-    
-    var events = await response.json();
-    if (!Array.isArray(events) || events.length === 0) {
-      container.innerHTML = '<div class="bit-loading">NO UPCOMING DATES.</div>';
-      return;
-    }
-    
-    var listHtml = events.slice(0, config.limit).map(function(event) {
-      var date = new Date(event.datetime);
-      var day = date.getDate();
-      var month = new Intl.DateTimeFormat(config.locale, { month: 'long' }).format(date).toUpperCase();
-      var formattedDate = day + ' ' + month;
-      var buyUrl = event.offers && event.offers.length > 0 ? event.offers[0].url : event.url;
-      
-      return '<div class="bit-event-row">' +
-        '<div class="bit-venue">' + event.venue.name + '</div>' +
-        '<div class="bit-date">' + formattedDate + '</div>' +
-        '<div class="bit-location">' + event.venue.city + ', ' + event.venue.country + '</div>' +
-        '<div class="bit-action"><a href="' + buyUrl + '" target="_blank" rel="noopener noreferrer" class="bit-buy-btn">' + config.button + '</a></div>' +
-      '</div>';
-    }).join('');
-    
-    container.innerHTML = '<div class="bit-events-list">' + listHtml + '</div>';
-  } catch (error) {
-    container.innerHTML = '<div class="bit-loading">ERROR LOADING DATES.</div>';
-  }
-})();
-</script>`;
+<div class="bit-static-widget">
+  ${events.length > 0 ? `<div class="bit-events-list">${listHtml}</div>` : emptyMsg}
+</div>`;
 }
+
 
 function generateWidgetPage(origin: string, config: WidgetConfig, env: Env): string {
   return `<!DOCTYPE html>
