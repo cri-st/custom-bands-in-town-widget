@@ -97,11 +97,11 @@ export default {
         },
       });
     }
-    // --- Catch-all Proxy for Cargo.site ---
+    // --- Catch-all Proxy for paulaprieto.com ---
     // This allows the entire site to work under the worker domain, including assets, JS, and navigation.
     try {
       // 1. Prepare the upstream URL
-      const cargoUrl = new URL(url.pathname + url.search, 'https://673870.cargo.site');
+      const cargoUrl = new URL(url.pathname + url.search, 'https://paulaprieto.com');
 
       // 2. Fetch from Cargo.site
       const cargoResponse = await fetch(cargoUrl.toString(), {
@@ -120,8 +120,35 @@ export default {
       // 4. For HTML, perform our injections
       let html = await cargoResponse.text();
 
-      // Fix Cargo API calls: It expects the hostname to match a site name. 
-      // We force it to use '673870'.
+      const workerDomain = url.hostname;
+      
+      // Strategy: Replace Cargo's internal state references to prevent redirects
+      // BUT preserve navigation links in href attributes
+      
+      // Replace canonical URL references in meta tags
+      html = html.replace(/<meta property="og:url" content="https:\/\/paulaprieto\.com"/g, `<meta property="og:url" content="https://${workerDomain}"`);
+      html = html.replace(/<meta property="og:url" content="https:\/\/www\.paulaprieto\.com"/g, `<meta property="og:url" content="https://www.${workerDomain}"`);
+      html = html.replace(/<link rel="canonical" href="https:\/\/paulaprieto\.com"/g, `<link rel="canonical" href="https://${workerDomain}"`);
+      
+      // Fix Cargo's preloaded state - these are internal references, not user links
+      // Only replace within the __PRELOADED_STATE__ JSON structure
+      const stateMatch = html.match(/window\.__PRELOADED_STATE__=({.+?});?<\/script>/);
+      if (stateMatch) {
+        let stateStr = stateMatch[1];
+        // Replace Cargo's internal domain references
+        stateStr = stateStr.replace(/"hostname":"paulaprieto\.com"/g, `"hostname":"${workerDomain}"`);
+        stateStr = stateStr.replace(/"display_url":"paulaprieto\.com"/g, `"display_url":"${workerDomain}"`);
+        stateStr = stateStr.replace(/"domain":"paulaprieto\.com"/g, `"domain":"${workerDomain}"`);
+        stateStr = stateStr.replace(/"direct_link":"https:\/\/paulaprieto\.com"/g, `"direct_link":"https://${workerDomain}"`);
+        stateStr = stateStr.replace(/"css_url":"https:\/\/paulaprieto\.com/g, `"css_url":"https://${workerDomain}`);
+        stateStr = stateStr.replace(/"rss_url":"https:\/\/paulaprieto\.com/g, `"rss_url":"https://${workerDomain}`);
+        html = html.replace(/window\.__PRELOADED_STATE__=({.+?});?<\/script>/, `window.__PRELOADED_STATE__=${stateStr};</script>`);
+      }
+      
+      // Replace old worker domain references
+      html = html.replace(/bandsintown-widget\.crist-cloudflare\.workers\.dev/g, workerDomain);
+
+      // Enhanced fix script that prevents Cargo redirects but handles navigation
       const globalFixScript = `
         <script>
           (function() {

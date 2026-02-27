@@ -8,6 +8,6 @@ ALLOWED_ORIGINS = "*"
 [observability]
 enabled = true
 
-routes = [
-  { pattern = "tour.pilipresh.com", custom_domain = true }
-]
+[[routes]]
+pattern = "tour.pilipresh.com"
+custom_domain = true
